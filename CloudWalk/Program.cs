@@ -10,7 +10,7 @@ namespace CloudWalkProject
         static void Main(string[] args)
         {
             Debug.Write("Hello, World!");
-            ProcessLog.Process(@"C:\Users\alber\source\repos\CloudWalk\CloudWalk\Log\qgames.log");
+            ProcessLog.ProcessReport(@"C:\Users\alber\source\repos\CloudWalk\CloudWalk\Log\qgames.log");
         }
     }
 }

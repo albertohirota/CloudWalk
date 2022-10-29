@@ -1,48 +1,45 @@
-﻿using System.Diagnostics;
+﻿using LogParser;
+using System.Diagnostics;
 using System.IO;
 
 namespace CloudWalkProject
 {
     public class ProcessLog
     {
-        public static void Process(string filePath)
+        static IDictionary<string, object> game = new Dictionary<string, object>();
+        public static void ProcessReport(string filePath)
         {
+            List<string> lines = new List<string>();
             if (File.Exists(filePath))
-                ReadLog(filePath);
+            {
+                lines = ReturnReadLog(filePath);
+                LogParser(lines);
+            }
         }
-        public static void ReadLog(string filePath)
+        private static List<string> ReturnReadLog(string filePath)
         {
-            string data;
-            StreamReader streamReader = null;
+            List<string> lines = new();
             try
             {
-                // Read the log
-                streamReader = new StreamReader(filePath);
-                data = streamReader.ReadLine();
-
-                while (streamReader != null)
+                var logFile = File.ReadLines(filePath);
+                foreach(var line in logFile)
                 {
-                    Debug.Write(data);
-                    data = streamReader.ReadLine();
+                    lines.Add(line);
                 }
             }
             catch (Exception e)
             {
                 Debug.Write(e.Message);
             }
-            finally
+            return lines;
+        }
+        private static void LogParser(List<string> logFile)
+        {
+            foreach (var line in logFile)
             {
-                streamReader.Close();
+                //Debug.Write(line);
+                CreateReport.GenerateJson(line, logFile.Count());
             }
         }
-        public static void LogParser(string filePath)
-        {
-            
-            
-        }
     }
-
-    
-
-
 }
