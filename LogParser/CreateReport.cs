@@ -1,115 +1,178 @@
 ﻿using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace LogParser
 {
     public static class CreateReport
     {
-        internal static int gameCounter = 0;
-        internal static bool newGame = true;
-        internal static int lineNumber = 0;
+        internal static Game game = new Game();
         internal static int _totalKills = 0;
-        internal static List<string> _players = new List<string>();
-        internal static List<Dictionary<string, object>> values = new List<Dictionary<string, object>>();
-        internal static Dictionary<string, object> playerRanking = new Dictionary<string, object>();
+        internal static Dictionary<string, int> _playerRanking = new Dictionary<string, int>();
+        internal static Dictionary<string, int> _weapon = new Dictionary<string, int>();
         internal static Dictionary<string, object> games = new Dictionary<string, object>();
-        internal static List<string> verifyLine = new List<string>();
+        internal static List<Dictionary<string, object>> values = new List<Dictionary<string, object>>();
 
         public static void GenerateJson(string line, int lastLine)
         {
             AnalysingLine(line);
 
-            if (newGame == false && gameCounter > 0)
+            if (game.newGame == false && game.gameCounter > 0)
             {
-                var game = new GameDetails();
-                game.total_Kills = _totalKills;
-                games.Add("game_" + gameCounter.ToString(), game);
-                var x;
+                var gameRound = new GameDetails();
+                gameRound.total_Kills = _totalKills;
+                gameRound.player = ReturnPlayerList();
+                gameRound.kills = ReturnRankingPlayerList();
+                gameRound.kills_by_means = ReturnWeaponDeath();
+                games.Add("game_" + game.gameCounter.ToString(), gameRound);
             }
             
-            if(lastLine == lineNumber)
+            if(lastLine == game.lineNumber)
             {
                 values.Add(games);
-                Debug.WriteLine("LineNumber: " + verifyLine.Count().ToString() +" - "+verifyLine);
                 Debug.WriteLine(JsonConvert.SerializeObject(values));
             }
-            newGame = true;
+            game.newGame = true;
         }
 
         internal static void AnalysingLine(string checkLine)
         {
+            game.lineNumber++;
             if (checkLine.Contains("InitGame:"))
-            {
-                _totalKills = 0;
-                newGame = true;
-            }
+                ApplyingStartingRules();
+
             if (checkLine.Contains("ShutdownGame:"))
-            {
-                newGame = false;
-                gameCounter++;
-            }
+                ApplyingShutdownRules();
+
             if (checkLine.Contains("Kill:"))
                 AnalysingKill(checkLine);
-
-            lineNumber++;
         }
         
         internal static void AnalysingKill(string killLine)
         {
-            verifyLine.Add(killLine);
             _totalKills++;
+            string killer = ReturnKillerString(killLine);
+            string killed = ReturnKilledPersonString(killLine);
+            string weapon = ReturnKillerWeaponString(killLine);
+            UpdatingKillsReport(killer, killed, weapon);
         }
+
+        internal static void UpdatingKillsReport(string killer, string killed, string weapon)
+        {
+            if (killer.Contains("world"))
+            {
+                if (_playerRanking.ContainsKey(killed))
+                    _playerRanking[killed]--;
+                else
+                    _playerRanking.Add(killed, -1);
+            }
+            else
+            {
+                if (_playerRanking.ContainsKey(killer))
+                    _playerRanking[killer]++;
+                else
+                    _playerRanking.Add(killer, 1);
+                
+                UpdatingKilledReport(killed);
+            }
+
+            if (_weapon.ContainsKey(weapon))
+                _weapon[weapon]++;
+            else
+                _weapon.Add(weapon, 1);
+        }
+
+        internal static void UpdatingKilledReport(string killed)
+        {
+            if (!_playerRanking.ContainsKey(killed))
+                _playerRanking.Add(killed, 0);
+        }
+        internal static void ApplyingShutdownRules()
+        {
+            game.newGame = false;
+            game.gameWasShutdown = true;
+        }
+
+        internal static void ApplyingStartingRules()
+        {
+            if (game.gameWasShutdown)
+            {
+                _totalKills = 0;
+                _playerRanking.Clear();
+                game.newGame = true;
+                game.gameCounter++;
+                game.gameWasShutdown = false;
+            }
+        }
+
+        internal static List<string> ReturnPlayerList()
+        {
+            List<string> list = new List<string>();
+            foreach(KeyValuePair<string, int> player in _playerRanking)
+            {
+                list.Add(player.Key);
+            }
+            return list;
+        }
+
+        internal static Dictionary<string,int> ReturnRankingPlayerList()
+        {
+            Dictionary<string,int> dict = new Dictionary<string, int>();
+            foreach (KeyValuePair<string, int> player in _playerRanking)
+            {
+                dict.Add(player.Key, player.Value);
+            }
+            var newDict = dict.OrderByDescending(x => x.Value).ToDictionary(x => x.Key, x=> x.Value);
+            return newDict;
+        }
+
+        internal static Dictionary<string, int> ReturnWeaponDeath()
+        {
+            Dictionary<string, int> dict = new Dictionary<string, int>();
+            foreach (KeyValuePair<string, int> player in _weapon)
+            {
+                dict.Add(player.Key, player.Value);
+            }
+            var newDict = dict.OrderByDescending(x => x.Value).ToDictionary(x => x.Key, x => x.Value);
+            return newDict;
+        }
+
+        internal static string ReturnKilledPersonString(string killLine)
+        {
+            int stringStartPosition = killLine.IndexOf(" killed ");
+            int stringEndPosition = killLine.IndexOf(" by ");
+            string killed = killLine.Substring(stringStartPosition +8, stringEndPosition-stringStartPosition-8);
+            return killed;
+        }
+
+        internal static string ReturnKillerWeaponString(string killLine)
+        {
+            int stringEndPosition = killLine.IndexOf(" by ");
+            string weapon = killLine.Substring(stringEndPosition+4);
+            return weapon;
+        }
+        internal static string ReturnKillerString(string killLine)
+        {
+            string updatedString = killLine.Remove(0,14);
+            int stringStartPosition = updatedString.IndexOf(": ");
+            int stringEndPosition = updatedString.IndexOf(" killed ");
+            string killer = updatedString.Substring(stringStartPosition + 2, stringEndPosition - stringStartPosition - 2);
+            return killer;
+        }
+    }
+
+    public class Game
+    {
+        public int lineNumber { get; set; }
+        public bool newGame { get; set; }
+        public int gameCounter { get; set; }
+        public bool gameWasShutdown { get; set; }
     }
 
     public class GameDetails 
     {
         public int total_Kills { get; set; }
-        public string[]? player { get; set; }
-        public string? kills { get; set; }
-        public string? kills_by_means { get; set; }
-    }
-
-    public class Kills
-    {
-
-    }
-
-    public class Kills_By_Means
-    {
-        public int MOD_UNKNOWN;
-        public int MOD_SHOTGUN;
-        public int MOD_GAUNTLET;
-        public int MOD_MACHINEGUN;
-        public int MOD_GRENADE;
-        public int MOD_GRENADE_SPLASH;
-        public int MOD_ROCKET;
-        public int MOD_ROCKET_SPLASH;
-        public int MOD_PLASMA;
-        public int MOD_PLASMA_SPLASH;
-        public int MOD_RAILGUN;
-        public int MOD_LIGHTNING;
-        public int MOD_BFG;
-        public int MOD_BFG_SPLASH;
-        public int MOD_WATER;
-        public int MOD_SLIME;
-        public int MOD_LAVA;
-        public int MOD_CRUSH;
-        public int MOD_TELEFRAG;
-        public int MOD_FALLING;
-        public int MOD_SUICIDE;
-        public int MOD_TARGET_LASER;
-        public int MOD_TRIGGER_HURT;
-        public int MOD_NAIL;
-        public int MOD_CHAINGUN;
-        public int MOD_PROXIMITY_MINE;
-        public int MOD_KAMIKAZE;
-        public int MOD_JUICED;
-        public int MOD_GRAPPLE;
+        public List<string>? player { get; set; }
+        public Dictionary<string, int>? kills { get; set; }
+        public Dictionary<string, int>? kills_by_means { get; set; }
     }
 }
