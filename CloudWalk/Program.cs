@@ -1,7 +1,4 @@
-﻿
-
-
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 namespace CloudWalkProject
 {
@@ -9,8 +6,10 @@ namespace CloudWalkProject
     {
         static void Main(string[] args)
         {
-            Debug.Write("Hello, World!");
-            ProcessLog.ProcessReport(@"C:\Users\alber\source\repos\CloudWalk\CloudWalk\Log\qgames.log");
+            string whereToSaveJsonFile = @"C:\users\alber\Desktop\CloudWalkReport.json";
+            string reportFile = @"C:\Users\alber\source\repos\CloudWalk\CloudWalk\Log\qgames.log";
+            bool wasSucessfullyProcessed = ProcessLog.ProcessReport(reportFile,whereToSaveJsonFile);
+            Debug.Write("Was sucessfully processed: " + wasSucessfullyProcessed.ToString());
         }
     }
 }
