@@ -1,42 +1,81 @@
 ﻿using Newtonsoft.Json;
 using System.Diagnostics;
 
-namespace LogParser
+namespace CloudWalkProject
 {
     public static class CreateReport
     {
-        internal static Game game = new Game();
-        internal static int _totalKills = 0;
-        internal static Dictionary<string, int> _playerRanking = new Dictionary<string, int>();
-        internal static Dictionary<string, int> _weapon = new Dictionary<string, int>();
-        internal static Dictionary<string, object> games = new Dictionary<string, object>();
-        internal static List<Dictionary<string, object>> values = new List<Dictionary<string, object>>();
+        private static ReportAnaliser report = new ReportAnaliser();
+        private static int _totalKills = 0;
+        private static Dictionary<string, int> _playerRanking = new Dictionary<string, int>();
+        private static Dictionary<string, int> _weapon = new Dictionary<string, int>();
+        private static Dictionary<string, object> games = new Dictionary<string, object>();
 
-        public static void GenerateJson(string line, int lastLine)
+        /// <summary>
+        /// Function that will create a JSON file
+        /// </summary>
+        /// <param name="line"> It should include the list to be read...</param>
+        /// <param name="lastLine"> It is expected to be informed what is the last line of the log file.</param>
+        /// <param name="saveJsonfile"> Location where the log file will be saved... </param>
+        internal static void GenerateJson(string line, int lastLine, string saveJsonfile)
         {
             AnalysingLine(line);
 
-            if (game.newGame == false && game.gameCounter > 0)
+            if (report.newGame == false && report.gameCounter > 0)
+                CreatingJsonGameRound();
+
+            if (lastLine == report.lineNumber && report.gameRoundGenerated)
             {
-                var gameRound = new GameDetails();
-                gameRound.total_Kills = _totalKills;
-                gameRound.player = ReturnPlayerList();
-                gameRound.kills = ReturnRankingPlayerList();
-                gameRound.kills_by_means = ReturnWeaponDeath();
-                games.Add("game_" + game.gameCounter.ToString(), gameRound);
+                using (StreamWriter file = File.CreateText(saveJsonfile))
+                {
+                    JsonSerializer serializer = new JsonSerializer();
+                    serializer.Serialize(file, games);
+                }
             }
-            
-            if(lastLine == game.lineNumber)
-            {
-                values.Add(games);
-                Debug.WriteLine(JsonConvert.SerializeObject(values));
-            }
-            game.newGame = true;
+            report.newGame = true;
         }
 
-        internal static void AnalysingLine(string checkLine)
+        /// <summary>
+        /// Function to validate if the specific file exists. It will loop for 10 seconds looking for the file.
+        /// </summary>
+        /// <param name="filePath"> File name and path parameter is required for the method. </param>
+        /// <returns></returns>
+        public static bool CheckFileExists(string filePath)
         {
-            game.lineNumber++;
+            int i = 0;
+            bool fileExists;
+            do
+            {
+                Thread.Sleep(1000);
+                fileExists = File.Exists(filePath);
+                i++;
+            }
+            while (i < 10 && !fileExists);
+
+            return fileExists;
+        }
+
+        /// <summary>
+        /// Function to create the JSON structure for each game round.
+        /// </summary>
+        private static void CreatingJsonGameRound()
+        {
+            var gameRound = new GameDetails();
+            gameRound.total_Kills = _totalKills;
+            gameRound.players = ReturnPlayerList();
+            gameRound.kills = ReturnRankingPlayerList();
+            gameRound.kills_by_means = ReturnWeaponDeath();
+            games.Add("game_" + report.gameCounter.ToString(), gameRound);
+            report.gameRoundGenerated = true;
+        }
+
+        /// <summary>
+        /// Function to check filter each line of the log
+        /// </summary>
+        /// <param name="checkLine"> A String of the line required to be analyzed </param>
+        private static void AnalysingLine(string checkLine)
+        {
+            report.lineNumber++;
             if (checkLine.Contains("InitGame:"))
                 ApplyingStartingRules();
 
@@ -44,10 +83,10 @@ namespace LogParser
                 ApplyingShutdownRules();
 
             if (checkLine.Contains("Kill:"))
-                AnalysingKill(checkLine);
+                AnalysingKillLine(checkLine);
         }
-        
-        internal static void AnalysingKill(string killLine)
+
+        private static void AnalysingKillLine(string killLine)
         {
             _totalKills++;
             string killer = ReturnKillerString(killLine);
@@ -56,7 +95,7 @@ namespace LogParser
             UpdatingKillsReport(killer, killed, weapon);
         }
 
-        internal static void UpdatingKillsReport(string killer, string killed, string weapon)
+        private static void UpdatingKillsReport(string killer, string killed, string weapon)
         {
             if (killer.Contains("world"))
             {
@@ -71,7 +110,7 @@ namespace LogParser
                     _playerRanking[killer]++;
                 else
                     _playerRanking.Add(killer, 1);
-                
+
                 UpdatingKilledReport(killed);
             }
 
@@ -81,51 +120,53 @@ namespace LogParser
                 _weapon.Add(weapon, 1);
         }
 
-        internal static void UpdatingKilledReport(string killed)
+        private static void UpdatingKilledReport(string killed)
         {
             if (!_playerRanking.ContainsKey(killed))
                 _playerRanking.Add(killed, 0);
         }
-        internal static void ApplyingShutdownRules()
+
+        private static void ApplyingShutdownRules()
         {
-            game.newGame = false;
-            game.gameWasShutdown = true;
+            report.newGame = false;
+            report.gameWasShutdown = true;
         }
 
-        internal static void ApplyingStartingRules()
+        private static void ApplyingStartingRules()
         {
-            if (game.gameWasShutdown)
+            if (report.gameWasShutdown)
             {
                 _totalKills = 0;
                 _playerRanking.Clear();
-                game.newGame = true;
-                game.gameCounter++;
-                game.gameWasShutdown = false;
+                _weapon.Clear();
+                report.newGame = true;
+                report.gameCounter++;
+                report.gameWasShutdown = false;
             }
         }
 
-        internal static List<string> ReturnPlayerList()
+        private static List<string> ReturnPlayerList()
         {
             List<string> list = new List<string>();
-            foreach(KeyValuePair<string, int> player in _playerRanking)
+            foreach (KeyValuePair<string, int> player in _playerRanking)
             {
                 list.Add(player.Key);
             }
             return list;
         }
 
-        internal static Dictionary<string,int> ReturnRankingPlayerList()
+        private static Dictionary<string, int> ReturnRankingPlayerList()
         {
-            Dictionary<string,int> dict = new Dictionary<string, int>();
+            Dictionary<string, int> dict = new Dictionary<string, int>();
             foreach (KeyValuePair<string, int> player in _playerRanking)
             {
                 dict.Add(player.Key, player.Value);
             }
-            var newDict = dict.OrderByDescending(x => x.Value).ToDictionary(x => x.Key, x=> x.Value);
+            var newDict = dict.OrderByDescending(x => x.Value).ToDictionary(x => x.Key, x => x.Value);
             return newDict;
         }
 
-        internal static Dictionary<string, int> ReturnWeaponDeath()
+        private static Dictionary<string, int> ReturnWeaponDeath()
         {
             Dictionary<string, int> dict = new Dictionary<string, int>();
             foreach (KeyValuePair<string, int> player in _weapon)
@@ -136,43 +177,28 @@ namespace LogParser
             return newDict;
         }
 
-        internal static string ReturnKilledPersonString(string killLine)
+        private static string ReturnKilledPersonString(string killLine)
         {
             int stringStartPosition = killLine.IndexOf(" killed ");
             int stringEndPosition = killLine.IndexOf(" by ");
-            string killed = killLine.Substring(stringStartPosition +8, stringEndPosition-stringStartPosition-8);
+            string killed = killLine.Substring(stringStartPosition + 8, stringEndPosition - stringStartPosition - 8);
             return killed;
         }
 
-        internal static string ReturnKillerWeaponString(string killLine)
+        private static string ReturnKillerWeaponString(string killLine)
         {
             int stringEndPosition = killLine.IndexOf(" by ");
-            string weapon = killLine.Substring(stringEndPosition+4);
+            string weapon = killLine.Substring(stringEndPosition + 4);
             return weapon;
         }
-        internal static string ReturnKillerString(string killLine)
+
+        private static string ReturnKillerString(string killLine)
         {
-            string updatedString = killLine.Remove(0,14);
+            string updatedString = killLine.Remove(0, 14);
             int stringStartPosition = updatedString.IndexOf(": ");
             int stringEndPosition = updatedString.IndexOf(" killed ");
             string killer = updatedString.Substring(stringStartPosition + 2, stringEndPosition - stringStartPosition - 2);
             return killer;
         }
-    }
-
-    public class Game
-    {
-        public int lineNumber { get; set; }
-        public bool newGame { get; set; }
-        public int gameCounter { get; set; }
-        public bool gameWasShutdown { get; set; }
-    }
-
-    public class GameDetails 
-    {
-        public int total_Kills { get; set; }
-        public List<string>? player { get; set; }
-        public Dictionary<string, int>? kills { get; set; }
-        public Dictionary<string, int>? kills_by_means { get; set; }
     }
 }
